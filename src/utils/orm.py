@@ -17,7 +17,7 @@ class ORM:
         cur = self.conn.cursor()
         usernames = set([message.sender for message in messages] + [message.receiver for message in messages])
         cur.executemany("INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING", [(username,) for username in usernames])
-        cur.executemany("INSERT INTO messages (sender, receiver, message) VALUES (%s, %s, %s)", [(message.sender, message.receiver, message.message) for message in messages])
+        # cur.executemany("INSERT INTO messages (sender, receiver, message) VALUES (%s, %s, %s)", [(message.sender, message.receiver, message.message) for message in messages])
         self.conn.commit()
         cur.close()
         

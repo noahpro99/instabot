@@ -49,7 +49,7 @@ class Crawler:
             pickle.dump(self.browser.get_cookies(), open("cookies.pkl", "wb"))
             self.logged_in = True
         else:
-            self.browser.get('https://instagram.com')
+            self.browser.get('https://www.instagram.com/direct/inbox/')
             cookies = pickle.load(open("cookies.pkl", "rb"))
             for cookie in cookies:
                 self.browser.add_cookie(cookie)
@@ -84,7 +84,7 @@ class Crawler:
         
     def insta_login(self, username:str, password:str) -> None:
         try:
-            self.browser.get('https://instagram.com')
+            self.browser.get('https://www.instagram.com/direct/inbox/')
             time.sleep(rd.randrange(2,4))
             input_username = self.browser.find_element(By.NAME, 'username')
             input_password = self.browser.find_element(By.NAME, 'password')
@@ -134,6 +134,21 @@ class Crawler:
         time.sleep(rd.randrange(2,4))
         text_area.send_keys(Keys.ENTER)
         
+    def wait_for_message(self, check_delay_s:int=20) -> None:
+        """Waits for message to be received. If not on inbox page, goes to inbox page.
+
+        Args:
+            check_delay_s (int, optional): Delay between checks. Defaults to 20.
+        """
+        if self.browser.current_url != 'https://www.instagram.com/direct/inbox/':
+            self.browser.get('https://www.instagram.com/direct/inbox/')
+            time.sleep(rd.randrange(3,4))
+        while True:
+            try: 
+                self.browser.find_element(By.XPATH, '/html/body/div[2]/div/div/div[2]/div/div/div/div[1]/div[1]/div/div[1]/div/div/div/div/div[2]/div[5]/div/a/div/div[1]/div/div[2]')
+                break
+            except:
+                time.sleep(check_delay_s)
 
     def send_mass_message(self, usernames : List[str], message:str, delay_s:int=6) -> List[models.Message|models.Error]:
         messages = []
@@ -148,7 +163,8 @@ class Crawler:
     
     def get_any_recent_messages(self, max:int=10, reply_fn:Callable[[List[models.Message]], str]=None) -> List[List[models.Message]] | models.Error:
         try:
-            self.browser.get('https://www.instagram.com/direct/inbox/')
+            if self.browser.current_url != 'https://www.instagram.com/direct/inbox/':
+                self.browser.get('https://www.instagram.com/direct/inbox/')
             time.sleep(rd.randrange(3,4))
             WebDriverWait(self.browser, 10).until(
                 EC.presence_of_element_located((By.XPATH, '/html/body/div[2]/div/div/div[2]/div/div/div/div[1]/div[1]/div/div[2]/div/section/div/div/div/div/div[1]/div[1]/div/div[2]/div/button/div'))
@@ -161,11 +177,13 @@ class Crawler:
             for (elem, username) in zip(unread_profile_img_elems, unread_usernames):
                 elem.click()
                 time.sleep(rd.randrange(2,4))
+                self.logger.info(f'Getting messages from {username}')
                 try:
                     thread_messages: List[models.Message] = self.get_thread_messages(username)
                     if reply_fn:
                         reply:str = reply_fn(thread_messages)
                         self.send_to_message_textarea(reply)
+                        self.logger.info(f'Replied to {username} with {reply}')
                         thread_messages.append(models.Message(self.username, username, reply))
                     all_messages.append(thread_messages)
                 except Exception as e:
