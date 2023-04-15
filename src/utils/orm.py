@@ -1,204 +1,44 @@
-import sqlite3
-
-DB_PATH = 'src/database.db3'
-
-def set_message_default(message_id):
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-
-        cur.execute('UPDATE messages SET actual=0 WHERE actual=?', (1,))
-        cur.execute('UPDATE messages SET actual=1 WHERE id=?', (message_id,))
-    except Exception as e:
-        print(f'{e.__class__} : {e}')
-        con.rollback()
-        r = {'status' : False, 'message' : e.args[0]}
-    else:
-        print(f'Message {message_id} set default')
-        con.commit()
-        r = {'status' : True, 'message' : f'Message {message_id} set default'}
-    finally:
-        cur.close()
-        con.close()
-
-        return r
-
-def messages_existants():
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-
-        cur.execute('SELECT * FROM messages')
-    except Exception as e:
-        print(f'{e.__class__} : {e}')
-        con.rollback()
-        r = {'status' : False, 'message' : e.args[0]}
-    else:
-        r = {'status' : True, 'message' : f'SUCCES', 'data' : cur.fetchall()}
-    finally:
-        cur.close()
-        con.close()
-
-    return r
-
-def insert_followers(followers):
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-
-        cur.executemany('INSERT INTO users (username) VALUES (?)', [(follower,) for follower in followers])
-    except sqlite3.IntegrityError as e:
-        print(e)
-        r = {'status' : True, 'message' : 'User already exists'}
-    except Exception as e:
-        print(f'{e.__class__} : {e}')
-        con.rollback()
-        r = {'status' : False, 'message' : e.args[0]}
-    else:
-        print('Insertion done')
-        con.commit()
-        r = {'status' : True, 'message' : 'Insertion done'}
-    finally:
-        cur.close()
-        con.close()
-
-        return r
-
-def update_user(user):
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-
-        cur.execute('UPDATE users SET pinned=1 WHERE username= ?', (user,))
-    except Exception as e:
-        print(f'{e.__class__} : {e}')
-        con.rollback()
-        r = {'status' : False, 'message' : e.args[0]}
-    else:
-        print(f'User {user} updated')
-        con.commit()
-        r = {'status' : True, 'message' : f'User {user} updated'}
-    finally:
-        cur.close()
-        con.close()
-
-        return r
-
-def add_new_message(message, set_default= False):
-    try:
-        con = sqlite3.connect(DB_PATH)
-        cur = con.cursor()
-
-        cur.execute('INSERT INTO messages (message) VALUES (?)', (message,))
-    except sqlite3.IntegrityError as e:
-        print(e)
-        r = {'status' : True, 'message' : 'Message already exists'}
-    except Exception as e:
-        print(f'{e.__class__} : {e}')
-        con.rollback()
-        r = {'status' : False, 'message' : e.args[0]}
-    else:
-        print('New message added')
-        con.commit()
-        r = {'status' : True, 'message' : 'New message added'}
-    finally:
-        cur.close()
-        con.close()
-
-        return r
-
-def all_users():
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-
-    try:
-        cur.execute('SELECT * FROM users')
-    except Exception as e:
-        print(e)
-        r = {
-            'status' : False,
-            'data' : e.args[0]
-        }
-    else:
-        r =  {
-            'status' : True,
-            'data' : cur.fetchall()
-        }
-    finally:
-        cur.close()
-        con.close()
+import psycopg2
+from typing import List
+import utils.models as models
+class ORM:
+    def __init__(self, connection_string: str):
+        self.conn = psycopg2.connect(connection_string)
+        
+    def get_all_users(self) -> List[models.User]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM users")
+        users: List[models.User] = []
+        for user in self.cur.fetchall():
+            users.append(models.User(*user))
+        return users
     
-    return r
-
-def pinned_users():
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-
-    try:
-        cur.execute('SELECT * FROM users WHERE pinned=?', (1,))
-    except Exception as e:
-        print(e)
-        r = {
-            'status' : False,
-            'data' : e.args[0]
-        }
-    else:
-        r =  {
-            'status' : True,
-            'data' : cur.fetchall()
-        }
-    finally:
+    def insert_messages(self, messages: List[models.Message]):
+        cur = self.conn.cursor()
+        usernames = set([message.sender for message in messages] + [message.receiver for message in messages])
+        cur.executemany("INSERT INTO users (username) VALUES (%s) ON CONFLICT DO NOTHING", [(username,) for username in usernames])
+        cur.executemany("INSERT INTO messages (sender, receiver, message) VALUES (%s, %s, %s)", [(message.sender, message.receiver, message.message) for message in messages])
+        self.conn.commit()
         cur.close()
-        con.close()
+        
+    def get_all_messages(self) -> List[models.Message]:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM messages")
+        messages: List[models.Message] = []
+        for message in cur.fetchall():
+            messages.append(models.Message(*message))
+        return messages
+            
+
+    def get_user_by_username(self, username: str) -> models.User:
+        cur = self.conn.cursor()
+        cur.execute("SELECT * FROM users WHERE username=%s", (username,))
+        user = cur.fetchone()
+        if user is None:
+            return None
+        return models.User(*user)
     
-    return r
-
-def not_pinned_users():
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-
-    try:
-        cur.execute('SELECT * FROM users WHERE pinned=?', (0,))
-    except Exception as e:
-        print(e)
-        r = {
-            'status' : False,
-            'data' : e.args[0]
-        }
-    else:
-        r =  {
-            'status' : True,
-            'data' : cur.fetchall()
-        }
-    finally:
-        cur.close()
-        con.close()
     
-    return r
-
-def get_default_message() -> dict:
-    con = sqlite3.connect(DB_PATH)
-    cur = con.cursor()
-
-    try:
-        cur.execute('SELECT message FROM messages WHERE actual=?', (1,))
-    except Exception as e:
-        print(e)
-        r = {
-            'status' : False,
-            'data' : e.args[0]
-        }
-    else:
-        r =  {
-            'status' : True,
-            'data' : cur.fetchone()[0]
-        }
-    finally:
-        cur.close()
-        con.close()
-    
-    return r
-
-if __name__ == '__main__':
-    set_message_default(5)
-    print(get_default_message())
+    # on takedown
+    def __del__(self):
+        self.conn.close()

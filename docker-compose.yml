@@ -1,0 +1,23 @@
+
+
+services:
+  db:
+    image: postgres
+    restart: always
+    environment:
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: postgres
+      POSTGRES_DB: instagram
+    ports:
+      - 5432:5432
+    volumes:
+      - ./postgres-data:/var/lib/postgresql/data
+
+  insta-bot:
+    build: .
+    restart: always
+    env_file:
+      - .env
+    depends_on:
+      - db
+    entrypoint: python3 src/main.py
